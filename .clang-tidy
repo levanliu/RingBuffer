@@ -1,0 +1,11 @@
+UseColor: true
+
+Checks: >
+    bugprone-*,
+    cppcoreguidelines-*,
+    google-*,
+    performance-*,
+    -cppcoreguidelines-avoid-magic-numbers,
+    -google-readability-magic-numbers
+
+WarningsAsErrors: "*"
