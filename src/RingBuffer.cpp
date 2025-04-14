@@ -1,40 +1,43 @@
-#include "src/include/MPMCRingBuffer.hpp"
-#include <thread>
+#include "src/include/SPSCRingBuffer.hpp"
 #include <chrono>
 #include <iostream>
+#include <thread>
 
-// Custom consumer implementation
-struct EventProcessor : public MPMCRingBuffer<int>::Consumer {
-    bool consume(const int& event) override {
-        std::cout << event << std::endl;
-        return true;
-    }
+class SimpleConsumer : public SPSCRingBuffer<int>::Consumer {
+public:
+  void consume(const int &event) override {
+    std::cout << "Consumed: " << event << std::endl;
+  }
 };
 
 int main() {
-    MPMCRingBuffer<int> buffer;
-    auto consumer = std::make_shared<EventProcessor>();
-    buffer.register_consumer(consumer);
+  SPSCRingBuffer<int> buffer(1024);
+  SimpleConsumer consumer;
 
-    Producer<int> producer(buffer);
+  // Producer thread
+  std::thread producer([&buffer]() {
+    for (int i = 0; i < 100; ++i) {
+      while (!buffer.try_enqueue(i)) {
+        std::this_thread::yield();
+      }
+      std::this_thread::sleep_for(std::chrono::milliseconds(10));
+    }
+  });
 
-    // Producer thread
-    std::thread producer_thread([&producer] {
-        for (int i = 0; i < 1000; ++i) {
-            producer.enqueue(i);
-        }
-    });
+  // Consumer thread
+  std::thread consumer_thread([&buffer]() {
+    int value;
+    while (true) {
+      if (buffer.try_dequeue(value)) {
+        std::cout << "Consumed: " << value << std::endl;
+      } else {
+        std::this_thread::sleep_for(std::chrono::milliseconds(1));
+      }
+    }
+  });
 
-    // Dispatcher thread
-    std::thread dispatcher([&buffer] {
-        while (true) {
-            buffer.dispatch_events();
-            std::this_thread::sleep_for(std::chrono::milliseconds(10));
-        }
-    });
+  producer.join();
+  consumer_thread.detach();
 
-    producer_thread.join();
-    dispatcher.detach();
-
-    return 0;
+  return 0;
 }
